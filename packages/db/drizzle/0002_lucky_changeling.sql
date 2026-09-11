@@ -1,0 +1,1 @@
+ALTER TABLE "guild_settings" ADD COLUMN "automod" jsonb DEFAULT '{}'::jsonb NOT NULL;

@@ -1,0 +1,21 @@
+{
+  "name": "dcbot",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @dcbot/bot",
+    "start": "npm run start -w @dcbot/bot",
+    "build": "npm run typecheck",
+    "typecheck": "npm run typecheck --workspaces",
+    "db:push": "npm run db:push -w @dcbot/db",
+    "db:generate": "npm run db:generate -w @dcbot/db",
+    "db:migrate": "npm run db:migrate -w @dcbot/db"
+  },
+  "dependencies": {
+    "postgres": "^3.4.9"
+  }
+}
