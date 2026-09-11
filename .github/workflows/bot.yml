@@ -1,0 +1,40 @@
+name: "bot: 24/7"
+
+on:
+  schedule:
+    - cron: "17 */4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: discord-bot
+  cancel-in-progress: false
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Start bot (until next scheduled run)
+        run: |
+          set +e
+          timeout 13500 npm run start
+          code=$?
+          if [ "$code" = "124" ]; then
+            echo "Cycle complete, waiting for next scheduled run."
+          else
+            echo "Bot exited early (code $code); aborting to keep restart clean."
+            exit "$code"
+          fi
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          HEARTBEAT_URL: ${{ secrets.HEARTBEAT_URL }}
