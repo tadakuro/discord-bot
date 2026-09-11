@@ -25,7 +25,7 @@ export function createDb(connectionString?: string): DbClient {
     throw new Error("DATABASE_URL is required to create a database client");
   }
   const { url, ssl } = normalizeUrl(raw);
-  const sql = postgres(url, { max: 1, ...(ssl ? { ssl } : {}) });
+  const sql = postgres(url, { max: 1, connect_timeout: 45, ...(ssl ? { ssl } : {}) });
   return drizzle(sql, { schema });
 }
 

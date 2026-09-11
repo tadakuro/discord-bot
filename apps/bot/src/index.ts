@@ -5,6 +5,7 @@ import { Client, GatewayIntentBits, Partials } from "discord.js";
 import { registerCommands } from "./commands/index.js";
 import { registerEvents } from "./events/index.js";
 import { startHeartbeat } from "./lib/heartbeat.js";
+import { startDbKeepAlive } from "./lib/dbKeepAlive.js";
 
 loadEnv({ path: [join(dirname(fileURLToPath(import.meta.url)), "../../../.env"), ".env"] });
 
@@ -36,3 +37,4 @@ client.once("ready", async () => {
 await client.login(token);
 console.log("Bot process running. Press Ctrl+C to stop.");
 startHeartbeat();
+startDbKeepAlive();
