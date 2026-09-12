@@ -9,6 +9,13 @@ import { startDbKeepAlive } from "./lib/dbKeepAlive.js";
 
 loadEnv({ path: [join(dirname(fileURLToPath(import.meta.url)), "../../../.env"), ".env"] });
 
+process.on("unhandledRejection", (reason) => {
+  console.error("[fatal-guard] unhandledRejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[fatal-guard] uncaughtException:", err);
+});
+
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
   console.error("DISCORD_TOKEN is missing. Copy .env.example to .env and fill it in.");

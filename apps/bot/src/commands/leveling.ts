@@ -5,7 +5,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { getDb } from "../lib/store.js";
-import { xpProfiles, levelRoles, levelFromXp, xpRequiredForLevel } from "@dcbot/db";
+import { xpProfiles, levelRoles, levelFromXp, xpRequiredForLevel, cumulativeXpForLevel } from "@dcbot/db";
 import { and, eq, desc, asc } from "drizzle-orm";
 import { uid } from "../lib/uid.js";
 import type { BotCommand } from "./index.js";
@@ -24,8 +24,9 @@ async function getProfile(guildId: string, userId: string) {
 }
 
 function progressBar(current: number, total: number, size = 12) {
-  const filled = Math.round((current / total) * size);
-  return "█".repeat(filled) + "░".repeat(Math.max(size - filled, 0));
+  const ratio = total <= 0 ? 0 : current / total;
+  const filled = Math.min(size, Math.max(0, Math.round(ratio * size)));
+  return "█".repeat(filled) + "░".repeat(size - filled);
 }
 
 export const levelingCommands: BotCommand[] = [
@@ -38,7 +39,7 @@ export const levelingCommands: BotCommand[] = [
       const targetUser = interaction.options.getUser("user") ?? interaction.user;
       const profile = await getProfile(interaction.guildId!, targetUser.id);
       const level = levelFromXp(profile.xp);
-      const current = profile.xp - (level === 1 ? 0 : xpRequiredForLevel(level - 1));
+      const current = Math.max(0, Math.min(profile.xp - cumulativeXpForLevel(level), xpRequiredForLevel(level)));
       const needed = xpRequiredForLevel(level);
       const embed = new EmbedBuilder()
         .setColor(0x5865f2)

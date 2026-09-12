@@ -15,6 +15,12 @@ export function xpRequiredForLevel(level: number): number {
   return LEVEL_XP_BASE + (level - 1) * LEVEL_XP_MULTIPLIER;
 }
 
+export function cumulativeXpForLevel(level: number): number {
+  let total = 0;
+  for (let i = 1; i < level; i++) total += xpRequiredForLevel(i);
+  return total;
+}
+
 export function levelFromXp(xp: number): number {
   let level = 1;
   let remaining = xp;
