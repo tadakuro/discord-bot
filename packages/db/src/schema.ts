@@ -10,6 +10,15 @@ export type AutomodConfig = {
   action?: "delete" | "warn";
 };
 
+export type AntiSpamConfig = {
+  enabled?: boolean;
+  limit?: number;
+  windowSecs?: number;
+  action?: "delete" | "warn" | "timeout";
+  timeoutMins?: number;
+  exemptRoles?: string[];
+};
+
 export type AutoModSettings = NonNullable<AutomodConfig>;
 
 export const guilds = pgTable("guilds", {
@@ -60,6 +69,9 @@ export const guildSettings = pgTable("guild_settings", {
 
   // Auto-mod
   automod: jsonb("automod").$type<AutomodConfig>().default({}).notNull(),
+
+  // Anti-spam
+  antispam: jsonb("antispam").$type<AntiSpamConfig>().default({}).notNull(),
 });
 
 export const levelRoles = pgTable("level_roles", {

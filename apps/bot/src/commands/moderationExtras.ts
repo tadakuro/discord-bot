@@ -3,6 +3,7 @@ import {
   PermissionFlagsBits,
   type ChatInputCommandInteraction,
 } from "discord.js";
+import { C, makeEmbed, okReply, errReply, infoReply } from "../lib/embeds.js";
 import type { BotCommand } from "./index.js";
 
 const mod = PermissionFlagsBits.ModerateMembers;
@@ -25,11 +26,16 @@ export const moderationExtraCommands: BotCommand[] = [
       const reason = interaction.options.getString("reason") ?? "No reason provided";
       const target = await interaction.guild!.members.fetch(user.id).catch(() => null);
       if (!target) {
-        await interaction.reply({ content: "Could not find that member.", ephemeral: true });
+        await errReply(interaction, "Member not found", "Could not find that member.");
         return;
       }
       await target.timeout(minutes * 60_000, reason);
-      await interaction.reply({ content: `Muted <@${user.id}> for **${minutes} minutes**. Reason: ${reason}`, ephemeral: true });
+      await interaction.reply({
+        embeds: [
+          makeEmbed(C.mod, "Member Muted", `**User:** <@${user.id}>\n**Duration:** ${minutes} minutes\n**Reason:** ${reason}`),
+        ],
+        ephemeral: true,
+      });
     },
   },
 
@@ -43,15 +49,15 @@ export const moderationExtraCommands: BotCommand[] = [
       const user = interaction.options.getUser("user", true);
       const target = await interaction.guild!.members.fetch(user.id).catch(() => null);
       if (!target) {
-        await interaction.reply({ content: "Could not find that member.", ephemeral: true });
+        await errReply(interaction, "Member not found", "Could not find that member.");
         return;
       }
       if (!target.communicationDisabledUntilTimestamp) {
-        await interaction.reply({ content: `<@${user.id}> isn't muted.`, ephemeral: true });
+        await infoReply(interaction, "Not muted", `<@${user.id}> isn't muted.`);
         return;
       }
       await target.timeout(null);
-      await interaction.reply({ content: `Unmuted <@${user.id}>.`, ephemeral: true });
+      await okReply(interaction, "Member unmuted", `<@${user.id}> was unmuted.`);
     },
   },
 
@@ -66,11 +72,11 @@ export const moderationExtraCommands: BotCommand[] = [
       const seconds = interaction.options.getInteger("seconds", true);
       const channel = interaction.options.getChannel("channel") ?? interaction.channel;
       if (!channel || !("setRateLimitPerUser" in channel)) {
-        await interaction.reply({ content: "Please pick a text channel.", ephemeral: true });
+        await errReply(interaction, "Invalid channel", "Please pick a text channel.");
         return;
       }
       await channel.setRateLimitPerUser(seconds);
-      await interaction.reply({ content: `Slowmode in ${channel} set to **${seconds} seconds**${seconds === 0 ? " (off)" : ""}.`, ephemeral: true });
+      await okReply(interaction, "Slowmode set", `Slowmode in ${channel} set to **${seconds} seconds**${seconds === 0 ? " (off)" : ""}.`);
     },
   },
 
@@ -83,11 +89,11 @@ export const moderationExtraCommands: BotCommand[] = [
     async execute(interaction) {
       const channel = interaction.options.getChannel("channel") ?? interaction.channel;
       if (!channel || !("permissionOverwrites" in channel)) {
-        await interaction.reply({ content: "Please pick a text channel.", ephemeral: true });
+        await errReply(interaction, "Invalid channel", "Please pick a text channel.");
         return;
       }
       await channel.permissionOverwrites.edit(channel.guild.roles.everyone, { SendMessages: false });
-      await interaction.reply({ content: `🔒 ${channel} locked.`, ephemeral: true });
+      await okReply(interaction, "Channel locked", `🔒 ${channel} was locked.`);
     },
   },
 
@@ -100,11 +106,11 @@ export const moderationExtraCommands: BotCommand[] = [
     async execute(interaction) {
       const channel = interaction.options.getChannel("channel") ?? interaction.channel;
       if (!channel || !("permissionOverwrites" in channel)) {
-        await interaction.reply({ content: "Please pick a text channel.", ephemeral: true });
+        await errReply(interaction, "Invalid channel", "Please pick a text channel.");
         return;
       }
       await channel.permissionOverwrites.edit(channel.guild.roles.everyone, { SendMessages: null });
-      await interaction.reply({ content: `🔓 ${channel} unlocked.`, ephemeral: true });
+      await okReply(interaction, "Channel unlocked", `🔓 ${channel} was unlocked.`);
     },
   },
 
@@ -120,11 +126,15 @@ export const moderationExtraCommands: BotCommand[] = [
       const nickname = interaction.options.getString("nickname") ?? "";
       const target = await interaction.guild!.members.fetch(user.id).catch(() => null);
       if (!target) {
-        await interaction.reply({ content: "Could not find that member.", ephemeral: true });
+        await errReply(interaction, "Member not found", "Could not find that member.");
         return;
       }
       await target.setNickname(nickname || null);
-      await interaction.reply({ content: nickname ? `Renamed <@${user.id}> to **${nickname}**.` : `Reset <@${user.id}>'s nickname.`, ephemeral: true });
+      if (nickname) {
+        await okReply(interaction, "Nickname changed", `<@${user.id}> was renamed to **${nickname}**.`);
+      } else {
+        await okReply(interaction, "Nickname reset", `<@${user.id}>'s nickname was reset.`);
+      }
     },
   },
 
@@ -152,28 +162,28 @@ export const moderationExtraCommands: BotCommand[] = [
       const user = interaction.options.getUser("user", true);
       const role = interaction.options.getRole("role", true);
       if (role.id === interaction.guild!.id) {
-        await interaction.reply({ content: "@everyone can't be assigned with this command.", ephemeral: true });
+        await errReply(interaction, "Invalid role", "@everyone can't be assigned with this command.");
         return;
       }
       const target = await interaction.guild!.members.fetch(user.id).catch(() => null);
       if (!target) {
-        await interaction.reply({ content: "Could not find that member.", ephemeral: true });
+        await errReply(interaction, "Member not found", "Could not find that member.");
         return;
       }
       if (sub === "add") {
         if (target.roles.cache.has(role.id)) {
-          await interaction.reply({ content: `<@${user.id}> already has <@&${role.id}>.`, ephemeral: true });
+          await infoReply(interaction, "Already assigned", `<@${user.id}> already has <@&${role.id}>.`);
           return;
         }
         await target.roles.add(role.id);
-        await interaction.reply({ content: `Added <@&${role.id}> to <@${user.id}>.`, ephemeral: true });
+        await okReply(interaction, "Role added", `Added <@&${role.id}> to <@${user.id}>.`);
       } else {
         if (!target.roles.cache.has(role.id)) {
-          await interaction.reply({ content: `<@${user.id}> doesn't have <@&${role.id}>.`, ephemeral: true });
+          await infoReply(interaction, "Role missing", `<@${user.id}> doesn't have <@&${role.id}>.`);
           return;
         }
         await target.roles.remove(role.id);
-        await interaction.reply({ content: `Removed <@&${role.id}> from <@${user.id}>.`, ephemeral: true });
+        await okReply(interaction, "Role removed", `Removed <@&${role.id}> from <@${user.id}>.`);
       }
     },
   },

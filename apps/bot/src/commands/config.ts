@@ -7,6 +7,7 @@ import { getDb, getSettings, updateSettings } from "../lib/store.js";
 import { DEFAULT_LOG_EVENTS, autoRoles } from "@dcbot/db";
 import { and, eq } from "drizzle-orm";
 import { uid } from "../lib/uid.js";
+import { C, makeEmbed, okReply, errReply, infoReply } from "../lib/embeds.js";
 import type { BotCommand } from "./index.js";
 
 const LOG_EVENT_CHOICES = DEFAULT_LOG_EVENTS.map((e) => ({ name: e, value: e }));
@@ -44,7 +45,7 @@ export const configCommands: BotCommand[] = [
         const stack = interaction.options.getBoolean("stack");
 
         if (min != null && max != null && min > max) {
-          await interaction.reply({ content: "min cannot be greater than max.", ephemeral: true });
+          await errReply(interaction, "Invalid values", "min cannot be greater than max.");
           return;
         }
 
@@ -58,25 +59,25 @@ export const configCommands: BotCommand[] = [
         if (stack != null) patch.stackLevelRoles = stack;
 
         if (Object.keys(patch).length === 0) {
-          await interaction.reply({ content: "Pick at least one setting to change, or use /levelconfig status.", ephemeral: true });
+          await errReply(interaction, "Nothing to change", "Pick at least one setting to change, or use /levelconfig status.");
           return;
         }
 
         await updateSettings(gid, patch);
-        await interaction.reply({ content: "Leveling settings saved.", ephemeral: true });
+        await okReply(interaction, "Leveling config saved", "Leveling settings were updated.");
         return;
       }
 
       const s = await getSettings(gid);
       const lines = [
-        `Enabled: **${s?.levelingEnabled ? "yes" : "no"}**`,
-        `XP per message: **${s?.xpMin ?? 5}-${s?.xpMax ?? 15}**`,
-        `Cooldown: **${s?.xpCooldownSecs ?? 60}s**`,
-        `Level-up channel: ${s?.levelUpChannel ? `<#${s.levelUpChannel}>` : "default (channel where leveled up)"}`,
-        `Level-up message: \`${s?.levelUpMessage ?? "-"}\``,
-        `Stack level roles: **${s?.stackLevelRoles ? "yes" : "no"}**`,
+        `**Enabled:** ${s?.levelingEnabled ? "yes" : "no"}`,
+        `**XP per message:** ${s?.xpMin ?? 5}-${s?.xpMax ?? 15}`,
+        `**Cooldown:** ${s?.xpCooldownSecs ?? 60}s`,
+        `**Level-up channel:** ${s?.levelUpChannel ? `<#${s.levelUpChannel}>` : "default (channel where leveled up)"}`,
+        `**Level-up message:** \`${s?.levelUpMessage ?? "-"}\``,
+        `**Stack level roles:** ${s?.stackLevelRoles ? "yes" : "no"}`,
       ];
-      await interaction.reply({ content: `**Leveling config**\n${lines.join("\n")}`, ephemeral: true });
+      await infoReply(interaction, "Leveling config", lines.join("\n"));
     },
   },
 
@@ -113,11 +114,11 @@ export const configCommands: BotCommand[] = [
       if (sub === "channel") {
         const channel = interaction.options.getChannel("channel", true);
         await updateSettings(gid, { logChannel: channel.id });
-        await interaction.reply({ content: `Log channel set to ${channel}.`, ephemeral: true });
+        await okReply(interaction, "Log channel set", `Log channel set to ${channel}.`);
       } else if (sub === "enable") {
         const enabled = interaction.options.getBoolean("enabled", true);
         await updateSettings(gid, { loggingEnabled: enabled });
-        await interaction.reply({ content: `Logging is now **${enabled ? "ON" : "OFF"}**.`, ephemeral: true });
+        await okReply(interaction, "Logging updated", `Logging is now **${enabled ? "ON" : "OFF"}**.`);
       } else if (sub === "events") {
         const event = interaction.options.getString("event", true);
         const enabled = interaction.options.getBoolean("enabled", true);
@@ -125,14 +126,14 @@ export const configCommands: BotCommand[] = [
         if (enabled) current.add(event);
         else current.delete(event);
         await updateSettings(gid, { logEvents: [...current] });
-        await interaction.reply({ content: `Log event \`${event}\` is now **${enabled ? "ON" : "OFF"}**.`, ephemeral: true });
+        await okReply(interaction, "Log event updated", `Log event \`${event}\` is now **${enabled ? "ON" : "OFF"}**.`);
       } else {
         const lines = [
-          `Enabled: **${s?.loggingEnabled ? "yes" : "no"}**`,
-          `Channel: ${s?.logChannel ? `<#${s.logChannel}>` : "**not set**"}`,
-          `Events: ${(s?.logEvents ?? []).length > 0 ? (s?.logEvents ?? []).map((e) => `\`${e}\``).join(", ") : "none"}`,
+          `**Enabled:** ${s?.loggingEnabled ? "yes" : "no"}`,
+          `**Channel:** ${s?.logChannel ? `<#${s.logChannel}>` : "not set"}`,
+          `**Events:** ${(s?.logEvents ?? []).length > 0 ? (s?.logEvents ?? []).map((e) => `\`${e}\``).join(", ") : "none"}`,
         ];
-        await interaction.reply({ content: `**Logging config**\n${lines.join("\n")}`, ephemeral: true });
+        await infoReply(interaction, "Logging config", lines.join("\n"));
       }
     },
   },
@@ -153,24 +154,27 @@ export const configCommands: BotCommand[] = [
       if (sub === "add") {
         const role = interaction.options.getRole("role", true);
         if (role.id === interaction.guild!.id) {
-          await interaction.reply({ content: "@everyone cannot be an auto role.", ephemeral: true });
+          await errReply(interaction, "Invalid role", "@everyone cannot be an auto role.");
           return;
         }
         await getDb().insert(autoRoles).values({ id, guildId: gid, roleId: role.id }).onConflictDoNothing();
-        await interaction.reply({ content: `<@&${role.id}> will be assigned to new members.`, ephemeral: true });
+        await okReply(interaction, "Auto role added", `<@&${role.id}> will be assigned to new members.`);
       } else if (sub === "remove") {
         const role = interaction.options.getRole("role", true);
         const deleted = await getDb().delete(autoRoles).where(and(eq(autoRoles.guildId, gid), eq(autoRoles.roleId, role.id)));
         const removed = (deleted as unknown as { count: number }).count ?? 0;
-        await interaction.reply({ content: removed > 0 ? `Removed <@&${role.id}> from auto roles.` : `No auto role set for <@&${role.id}>.`, ephemeral: true });
+        if (removed > 0) {
+          await okReply(interaction, "Auto role removed", `Removed <@&${role.id}> from auto roles.`);
+        } else {
+          await infoReply(interaction, "Not configured", `No auto role set for <@&${role.id}>.`);
+        }
       } else {
         const list = await getDb().select().from(autoRoles).where(eq(autoRoles.guildId, gid));
         if (list.length === 0) {
-          await interaction.reply({ content: "No auto roles configured.", ephemeral: true });
+          await infoReply(interaction, "No auto roles", "No auto roles configured.");
           return;
         }
-        const lines = list.map((r) => `<@&${r.roleId}>`);
-        await interaction.reply({ content: `**Auto roles:**\n${lines.join("\n")}`, ephemeral: true });
+        await infoReply(interaction, "Auto roles", list.map((r) => `<@&${r.roleId}>`).join("\n"));
       }
     },
   },

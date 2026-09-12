@@ -10,6 +10,7 @@ import { handleMemberAdd, handleMemberLeave } from "./memberJoin.js";
 import { handleMessageDelete, handleMessageEdit } from "./messageLog.js";
 import { handleMemberUpdate } from "./memberUpdate.js";
 import { ensureGuild } from "../lib/store.js";
+import { makeEmbed, C } from "../lib/embeds.js";
 
 export function registerEvents(client: Client) {
   client.on(Events.ClientReady, (c) => {
@@ -25,18 +26,18 @@ export function registerEvents(client: Client) {
     if (!interaction.isChatInputCommand()) return;
     const cmd = commandRegistry.get(interaction.commandName);
     if (!cmd) {
-      await interaction.reply({ content: "Unknown command.", ephemeral: true });
+      await interaction.reply({ embeds: [makeEmbed(C.error, "Unknown command", "Unknown command.")], ephemeral: true });
       return;
     }
     try {
       await cmd.execute(interaction as ChatInputCommandInteraction, client);
     } catch (err) {
       console.error(`Command ${interaction.commandName} failed:`, err);
-      const msg = "Something went wrong while running this command.";
+      const msg = makeEmbed(C.error, "Something went wrong", "An error occurred while running this command. Please try again.");
       if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ content: msg, ephemeral: true }).catch(() => {});
+        await interaction.followUp({ embeds: [msg], ephemeral: true }).catch(() => {});
       } else {
-        await interaction.reply({ content: msg, ephemeral: true }).catch(() => {});
+        await interaction.reply({ embeds: [msg], ephemeral: true }).catch(() => {});
       }
     }
   });

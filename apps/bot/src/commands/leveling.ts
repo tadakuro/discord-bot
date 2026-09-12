@@ -8,6 +8,7 @@ import { getDb } from "../lib/store.js";
 import { xpProfiles, levelRoles, levelFromXp, xpRequiredForLevel, cumulativeXpForLevel } from "@dcbot/db";
 import { and, eq, desc, asc } from "drizzle-orm";
 import { uid } from "../lib/uid.js";
+import { C, makeEmbed, okReply, errReply, infoReply } from "../lib/embeds.js";
 import type { BotCommand } from "./index.js";
 
 async function getProfile(guildId: string, userId: string) {
@@ -42,9 +43,11 @@ export const levelingCommands: BotCommand[] = [
       const current = Math.max(0, Math.min(profile.xp - cumulativeXpForLevel(level), xpRequiredForLevel(level)));
       const needed = xpRequiredForLevel(level);
       const embed = new EmbedBuilder()
-        .setColor(0x5865f2)
+        .setColor(C.leveling)
         .setTitle(`Rank — ${targetUser.tag}`)
-        .setDescription(`**Level ${level}**\n${progressBar(current, needed)}\n\`${current}/${needed} XP\``);
+        .setDescription(`**Level ${level}**\n${progressBar(current, needed)}\n\`${current}/${needed} XP\``)
+        .setThumbnail(targetUser.displayAvatarURL({ size: 256 }))
+        .setFooter({ text: "Leveling" });
       await interaction.reply({ embeds: [embed] });
     },
   },
@@ -76,7 +79,7 @@ export const levelingCommands: BotCommand[] = [
         });
 
       await interaction.reply({
-        content: `Adjusted XP for <@${user.id}> by **${amount > 0 ? `+${amount}` : amount}** → now \`${newXp} XP\` (level **${levelFromXp(newXp)}**).`,
+        embeds: [makeEmbed(C.leveling, "XP adjusted", `Adjusted XP for <@${user.id}> by **${amount > 0 ? `+${amount}` : amount}** → now \`${newXp} XP\` (level **${levelFromXp(newXp)}**).`)],
         ephemeral: true,
       });
     },
@@ -93,7 +96,7 @@ export const levelingCommands: BotCommand[] = [
         .orderBy(desc(xpProfiles.xp))
         .limit(10);
       if (top.length === 0) {
-        await interaction.reply({ content: "No XP data yet.", ephemeral: true });
+        await infoReply(interaction, "No XP data", "No XP data yet.");
         return;
       }
       const lines = await Promise.all(
@@ -105,9 +108,10 @@ export const levelingCommands: BotCommand[] = [
         })
       );
       const embed = new EmbedBuilder()
-        .setColor(0x5865f2)
+        .setColor(C.leveling)
         .setTitle("Leaderboard")
-        .setDescription(lines.join("\n"));
+        .setDescription(lines.join("\n"))
+        .setFooter({ text: "Leveling" });
       await interaction.reply({ embeds: [embed] });
     },
   },
@@ -139,31 +143,31 @@ export const levelingCommands: BotCommand[] = [
         const level = interaction.options.getInteger("level", true);
         const role = interaction.options.getRole("role", true);
         if (role.id === interaction.guild!.id) {
-          await interaction.reply({ content: "@everyone cannot be used as a level role.", ephemeral: true });
+          await errReply(interaction, "Invalid role", "@everyone cannot be used as a level role.");
           return;
         }
         await db
           .insert(levelRoles)
           .values({ id: uid("lvl_"), guildId: gid, level, roleId: role.id })
           .onConflictDoNothing();
-        await interaction.reply({ content: `Role <@&${role.id}> will be granted at level **${level}**.`, ephemeral: true });
+        await okReply(interaction, "Level role added", `Role <@&${role.id}> will be granted at level **${level}**.`);
       } else if (sub === "remove") {
         const level = interaction.options.getInteger("level", true);
         const found = await db.select().from(levelRoles).where(and(eq(levelRoles.guildId, gid), eq(levelRoles.level, level)));
         if (found.length === 0) {
-          await interaction.reply({ content: `No role configured for level ${level}.`, ephemeral: true });
+          await infoReply(interaction, "No level role", `No role configured for level ${level}.`);
           return;
         }
         for (const r of found) await db.delete(levelRoles).where(eq(levelRoles.id, r.id));
-        await interaction.reply({ content: `Removed level role at level **${level}**.`, ephemeral: true });
+        await okReply(interaction, "Level role removed", `Removed level role at level **${level}**.`);
       } else {
         const list = await db.select().from(levelRoles).where(eq(levelRoles.guildId, gid)).orderBy(asc(levelRoles.level));
         if (list.length === 0) {
-          await interaction.reply({ content: "No level roles configured.", ephemeral: true });
+          await infoReply(interaction, "No level roles", "No level roles configured.");
           return;
         }
-        const desc = `\`Level ${list.map((r) => r.level).join("`, `Level ")}\``;
-        await interaction.reply({ content: `**Level roles:**\n${desc}`, ephemeral: true });
+        const rows = list.map((r) => `**Level ${r.level}** → <@&${r.roleId}>`);
+        await infoReply(interaction, "Level roles", rows.join("\n"));
       }
     },
   },

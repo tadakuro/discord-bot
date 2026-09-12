@@ -5,18 +5,8 @@ import {
 } from "discord.js";
 import { getSettings, updateSettings } from "../lib/store.js";
 import type { AutomodConfig } from "@dcbot/db";
+import { C, makeEmbed, okReply, errReply, infoReply } from "../lib/embeds.js";
 import type { BotCommand } from "./index.js";
-
-function statusText(automod: AutomodConfig) {
-  const lines = [
-    `Enabled: **${automod.enabled ? "yes" : "no"}**`,
-    `Action on violation: **${automod.action === "warn" ? "delete + warn" : "delete only"}**`,
-    `Blocked words: ${automod.words?.length ? automod.words.map((w) => `\`${w}\``).join(", ") : "none"}`,
-    `Block invites: **${automod.invite ? "yes" : "no"}**`,
-    `Block excessive caps: **${automod.caps ? `yes (≥${automod.capsPercent ?? 70}% uppercase)` : "no"}**`,
-  ];
-  return lines.join("\n");
-}
 
 export const automodCommands: BotCommand[] = [
   {
@@ -77,10 +67,12 @@ export const automodCommands: BotCommand[] = [
       const s = await getSettings(gid);
       const current: AutomodConfig = s?.automod ?? {};
 
+      const automodEmbed = (title: string, desc: string) => makeEmbed(C.automod, title, desc);
+
       if (sub === "toggle") {
         const enabled = interaction.options.getBoolean("enabled", true);
         await updateSettings(gid, { automod: { ...current, enabled } });
-        await interaction.reply({ content: `Auto-mod is now **${enabled ? "ON" : "OFF"}**.`, ephemeral: true });
+        await okReply(interaction, "Auto-mod updated", `Auto-mod is now **${enabled ? "ON" : "OFF"}**.`, { footer: "Auto-mod" });
       } else if (sub === "words") {
         const group = interaction.options.getSubcommandGroup()!;
         const wordInput = interaction.options.getString("word");
@@ -89,39 +81,50 @@ export const automodCommands: BotCommand[] = [
         if (group === "add") {
           if (!word) return;
           if (words.includes(word)) {
-            await interaction.reply({ content: `\`${word}\` is already blocked.`, ephemeral: true });
+            await infoReply(interaction, "Already blocked", `\`${word}\` is already blocked.`);
             return;
           }
           words.push(word);
           await updateSettings(gid, { automod: { ...current, words } });
-          await interaction.reply({ content: `Blocked \`${word}\`.`, ephemeral: true });
+          await okReply(interaction, "Word blocked", `\`${word}\` is now blocked.`);
         } else if (group === "remove") {
           if (!word) return;
           const filtered = words.filter((w) => w !== word);
           await updateSettings(gid, { automod: { ...current, words: filtered } });
-          await interaction.reply({ content: filtered.length === words.length ? `\`${word}\` wasn't blocked.` : `Unblocked \`${word}\`.`, ephemeral: true });
+          if (filtered.length === words.length) {
+            await infoReply(interaction, "Not blocked", `\`${word}\` wasn't blocked.`);
+          } else {
+            await okReply(interaction, "Word unblocked", `\`${word}\` was unblocked.`);
+          }
         } else {
           if (words.length === 0) {
-            await interaction.reply({ content: "No blocked words.", ephemeral: true });
+            await infoReply(interaction, "No blocked words", "No blocked words configured.");
             return;
           }
-          await interaction.reply({ content: `**Blocked words:** ${words.map((w) => `\`${w}\``).join(", ")}`, ephemeral: true });
+          await infoReply(interaction, "Blocked words", words.map((w) => `\`${w}\``).join(", "));
         }
       } else if (sub === "invite") {
         const enabled = interaction.options.getBoolean("enabled", true);
         await updateSettings(gid, { automod: { ...current, invite: enabled } });
-        await interaction.reply({ content: `Invite filtering is now **${enabled ? "ON" : "OFF"}**.`, ephemeral: true });
+        await okReply(interaction, "Invite filter updated", `Invite filtering is now **${enabled ? "ON" : "OFF"}**.`);
       } else if (sub === "caps") {
         const enabled = interaction.options.getBoolean("enabled", true);
         const percent = interaction.options.getInteger("percent") ?? 70;
         await updateSettings(gid, { automod: { ...current, caps: enabled, capsPercent: percent } });
-        await interaction.reply({ content: `Caps filtering is now **${enabled ? `ON (≥${percent}% uppercase)` : "OFF"}**.`, ephemeral: true });
+        await okReply(interaction, "Caps filter updated", `Caps filtering is now **${enabled ? `ON (≥${percent}% uppercase)` : "OFF"}**.`);
       } else if (sub === "action") {
         const action = interaction.options.getString("action", true) as "delete" | "warn";
         await updateSettings(gid, { automod: { ...current, action } });
-        await interaction.reply({ content: `Violations now **${action === "warn" ? "delete + warn" : "delete only"}**.`, ephemeral: true });
+        await okReply(interaction, "Auto-mod action updated", `Violations now **${action === "warn" ? "delete + warn" : "delete only"}**.`);
       } else {
-        await interaction.reply({ content: `**Auto-mod config**\n${statusText(current)}`, ephemeral: true });
+        const lines = [
+          `**Enabled:** ${current.enabled ? "yes" : "no"}`,
+          `**Action on violation:** ${current.action === "warn" ? "delete + warn" : "delete only"}`,
+          `**Blocked words:** ${current.words?.length ? current.words.map((w) => `\`${w}\``).join(", ") : "none"}`,
+          `**Block invites:** ${current.invite ? "yes" : "no"}`,
+          `**Block excessive caps:** ${current.caps ? `yes (≥${current.capsPercent ?? 70}% uppercase)` : "no"}`,
+        ];
+        await infoReply(interaction, "Auto-mod config", lines.join("\n"));
       }
     },
   },

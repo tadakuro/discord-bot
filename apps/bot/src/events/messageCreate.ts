@@ -3,8 +3,11 @@ import { xpProfiles, guildSettings, levelRoles, levelFromXp, warns } from "@dcbo
 import { and, eq } from "drizzle-orm";
 import { uid } from "../lib/uid.js";
 import { activeWarnCount, punishAtLimit } from "../lib/punish.js";
+import { handleAntiSpam } from "../lib/antispam.js";
 import type { Message, TextChannel, NewsChannel, ThreadChannel } from "discord.js";
+import { EmbedBuilder } from "discord.js";
 import type { AutomodConfig } from "@dcbot/db";
+import { C } from "../lib/embeds.js";
 
 type SendableChannel = TextChannel | NewsChannel | ThreadChannel;
 
@@ -74,17 +77,28 @@ export async function handleMessage(message: Message) {
 
         message.author
           .send({
-            content: `Your message in **${message.guild.name}** was removed (${violation}). ${punishment ? `You were **${punishment}**. Warning ${count}/${settings.warnLimit}` : `Warning ${count}.`}`,
+            embeds: [new EmbedBuilder()
+              .setColor(C.automod)
+              .setTitle("Auto-mod — message removed")
+              .setDescription(`Your message in **${message.guild.name}** was removed (${violation}). ${punishment ? `You were **${punishment}**. Warning ${count}/${settings.warnLimit}` : `Warning ${count}.`}`)],
           })
           .catch(() => {});
       } else {
         message.author
-          .send({ content: `Your message in **${message.guild.name}** was removed (${violation}).` })
+          .send({
+            embeds: [new EmbedBuilder()
+              .setColor(C.automod)
+              .setTitle("Auto-mod — message removed")
+              .setDescription(`Your message in **${message.guild.name}** was removed (${violation}).`)],
+          })
           .catch(() => {});
       }
       return;
     }
   }
+
+  // --- Anti-spam ---
+  if (await handleAntiSpam(message, settings)) return;
 
   // --- Leveling ---
   if (!settings.levelingEnabled) return;
@@ -127,6 +141,15 @@ function isSendable(channel: unknown): channel is SendableChannel {
   return typeof channel === "object" && channel !== null && "send" in channel;
 }
 
+function buildLevelUpEmbed(message: Message, newLevel: number, text: string) {
+  return new EmbedBuilder()
+    .setColor(C.leveling)
+    .setTitle("🎉 Level up!")
+    .setDescription(text)
+    .setThumbnail(message.author.displayAvatarURL({ size: 256 }))
+    .setFooter({ text: message.guild?.name ?? "" });
+}
+
 async function handleLevelUp(message: Message, newLevel: number) {
   const db = getDb();
   const settings = await db.query.guildSettings.findFirst({
@@ -144,9 +167,9 @@ async function handleLevelUp(message: Message, newLevel: number) {
     : message.channel;
 
   if (isSendable(target)) {
-    await target.send(msg).catch(() => {});
+    await target.send({ embeds: [buildLevelUpEmbed(message, newLevel, msg)] }).catch(() => {});
   } else if (isSendable(message.channel)) {
-    await message.channel.send(msg).catch(() => {});
+    await message.channel.send({ embeds: [buildLevelUpEmbed(message, newLevel, msg)] }).catch(() => {});
   }
 
   const roles = await db

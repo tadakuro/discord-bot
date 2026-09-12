@@ -9,6 +9,7 @@ import { getDb, getSettings, updateSettings } from "../lib/store.js";
 import { uid } from "../lib/uid.js";
 import { warns, type guildSettings } from "@dcbot/db";
 import { eq, and } from "drizzle-orm";
+import { C, makeEmbed, errReply, okReply, infoReply } from "../lib/embeds.js";
 import type { BotCommand } from "./index.js";
 
 const requireModerator = <T extends { setDefaultMemberPermissions(permissions: unknown): T }>(builder: T): T =>
@@ -28,10 +29,10 @@ async function getTarget(interaction: ChatInputCommandInteraction) {
   return { member, user, target };
 }
 
-async function notifyTarget(client: Client, userId: string, content: string) {
+async function notifyTarget(client: Client, userId: string, title: string, desc: string, color = C.mod) {
   const target = await client.users.fetch(userId).catch(() => null);
   if (!target) return;
-  await target.send({ content }).catch(() => {});
+  await target.send({ embeds: [makeEmbed(color, title, desc)] }).catch(() => {});
 }
 
 async function postModLog(interaction: ChatInputCommandInteraction, embed: EmbedBuilder) {
@@ -77,8 +78,8 @@ async function applyWarnPunishment(
     await target?.ban({ reason: reasonText }).catch(() => {});
     actionName = "banned";
   }
-  await notifyTarget(client, targetId, `You've reached **${limit} warnings** and were **${actionName}** on ${interaction.guild!.name}.`);
-  await interaction.followUp({ content: `${mention} hit the **${limit}-warn limit** and was **${actionName}**.`, ephemeral: true });
+  await notifyTarget(client, targetId, "Warn limit reached", `You've reached **${limit} warnings** and were **${actionName}** on ${interaction.guild!.name}.`);
+  await interaction.followUp({ embeds: [makeEmbed(C.mod, "Auto-punishment", `${mention} hit the **${limit}-warn limit** and was **${actionName}**.`)], ephemeral: true });
 }
 
 export const moderationCommands: BotCommand[] = [
@@ -94,7 +95,7 @@ export const moderationCommands: BotCommand[] = [
       const { target, user } = await getTarget(interaction);
       const reason = interaction.options.getString("reason") ?? "No reason provided";
       if (!target) {
-        await interaction.reply({ content: "Could not find that member.", ephemeral: true });
+        await errReply(interaction, "Member not found", "Could not find that member.");
         return;
       }
       await target.kick(reason);
@@ -102,7 +103,7 @@ export const moderationCommands: BotCommand[] = [
       await interaction.reply({ embeds: [embed] });
       await postModLog(interaction, embed);
       const s = await getSettings(interaction.guildId!);
-      if (s?.modDmUser) await notifyTarget(client, user.id, `You were **kicked** from ${interaction.guild!.name}.\n**Reason:** ${reason}`);
+      if (s?.modDmUser) await notifyTarget(client, user.id, "Member Kicked", `You were **kicked** from ${interaction.guild!.name}.\n**Reason:** ${reason}`);
     },
   },
 
@@ -118,7 +119,7 @@ export const moderationCommands: BotCommand[] = [
       const { target, user } = await getTarget(interaction);
       const reason = interaction.options.getString("reason") ?? "No reason provided";
       if (!target) {
-        await interaction.reply({ content: "Could not find that member.", ephemeral: true });
+        await errReply(interaction, "Member not found", "Could not find that member.");
         return;
       }
       await target.ban({ reason });
@@ -126,7 +127,7 @@ export const moderationCommands: BotCommand[] = [
       await interaction.reply({ embeds: [embed] });
       await postModLog(interaction, embed);
       const s = await getSettings(interaction.guildId!);
-      if (s?.modDmUser) await notifyTarget(client, user.id, `You were **banned** from ${interaction.guild!.name}.\n**Reason:** ${reason}`);
+      if (s?.modDmUser) await notifyTarget(client, user.id, "Member Banned", `You were **banned** from ${interaction.guild!.name}.\n**Reason:** ${reason}`);
     },
   },
 
@@ -160,12 +161,12 @@ export const moderationCommands: BotCommand[] = [
       const minutes = interaction.options.getInteger("minutes", true);
       const reason = interaction.options.getString("reason") ?? "No reason provided";
       if (!target) {
-        await interaction.reply({ content: "Could not find that member.", ephemeral: true });
+        await errReply(interaction, "Member not found", "Could not find that member.");
         return;
       }
       const ms = minutes * 60_000;
       if (ms > 28 * 24 * 3600 * 1000) {
-        await interaction.reply({ content: "Timeout cannot exceed 28 days.", ephemeral: true });
+        await errReply(interaction, "Timeout too long", "Timeout cannot exceed 28 days.");
         return;
       }
       await target.timeout(ms, reason);
@@ -173,7 +174,7 @@ export const moderationCommands: BotCommand[] = [
       await interaction.reply({ embeds: [embed] });
       await postModLog(interaction, embed);
       const s = await getSettings(interaction.guildId!);
-      if (s?.modDmUser) await notifyTarget(client, user.id, `You were **timed out** for ${minutes} minutes in ${interaction.guild!.name}.\n**Reason:** ${reason}`);
+      if (s?.modDmUser) await notifyTarget(client, user.id, "Member Timed Out", `You were **timed out** for ${minutes} minutes in ${interaction.guild!.name}.\n**Reason:** ${reason}`);
     },
   },
 
@@ -189,7 +190,7 @@ export const moderationCommands: BotCommand[] = [
       const { target, user } = await getTarget(interaction);
       const reason = interaction.options.getString("reason") ?? "No reason provided";
       if (!target) {
-        await interaction.reply({ content: "Could not find that member.", ephemeral: true });
+        await errReply(interaction, "Member not found", "Could not find that member.");
         return;
       }
       const db = getDb();
@@ -205,7 +206,7 @@ export const moderationCommands: BotCommand[] = [
       await interaction.reply({ embeds: [embed] });
       await postModLog(interaction, embed);
       const s = await getSettings(interaction.guildId!);
-      if (s?.modDmUser) await notifyTarget(client, user.id, `You were **warned** in ${interaction.guild!.name}.\n**Reason:** ${reason}`);
+      if (s?.modDmUser) await notifyTarget(client, user.id, "Member Warned", `You were **warned** in ${interaction.guild!.name}.\n**Reason:** ${reason}`);
       await applyWarnPunishment(interaction, client, user.id, reason, s!);
     },
   },
@@ -239,7 +240,7 @@ export const moderationCommands: BotCommand[] = [
           .update(warns)
           .set({ active: false })
           .where(and(eq(warns.guildId, gid), eq(warns.userId, user.id), eq(warns.active, true)));
-        await interaction.reply({ content: `Cleared **${((updated as unknown as { count: number }).count) ?? 0}** warning(s) for <@${user.id}>.`, ephemeral: true });
+        await okReply(interaction, "Warnings cleared", `Cleared **${((updated as unknown as { count: number }).count) ?? 0}** warning(s) for <@${user.id}>.`);
         return;
       }
 
@@ -248,7 +249,7 @@ export const moderationCommands: BotCommand[] = [
         .from(warns)
         .where(and(eq(warns.guildId, gid), eq(warns.userId, user.id), eq(warns.active, true)));
       if (list.length === 0) {
-        await interaction.reply({ content: `**<@${user.id}>** has no warnings.`, ephemeral: true });
+        await infoReply(interaction, "No warnings", `**<@${user.id}>** has no warnings.`);
         return;
       }
       const fields = list.slice(0, 15).map((w) => [`#${w.id.replace("warn_", "")} — ${w.createdAt.toISOString().slice(0, 10)}`, `${w.reason ?? "No reason"} (by <@${w.moderatorId}>)`] as [string, string]);
@@ -268,11 +269,11 @@ export const moderationCommands: BotCommand[] = [
     async execute(interaction) {
       const count = Math.min(Math.max(interaction.options.getInteger("count", true), 1), 100);
       if (!interaction.channel || !("bulkDelete" in interaction.channel)) {
-        await interaction.reply({ content: "Cannot purge messages here.", ephemeral: true });
+        await errReply(interaction, "Cannot purge here", "Cannot purge messages in this channel.");
         return;
       }
       const deleted = await interaction.channel.bulkDelete(count, true);
-      await interaction.reply({ content: `Deleted **${deleted.size}** messages.`, ephemeral: true });
+      await okReply(interaction, "Messages purged", `Deleted **${deleted.size}** messages.`);
     },
   },
 
@@ -317,23 +318,23 @@ export const moderationCommands: BotCommand[] = [
         if (dm != null) patch.modDmUser = dm;
 
         if (Object.keys(patch).length === 0) {
-          await interaction.reply({ content: "Pick at least one setting to change, or use /warnconfig status.", ephemeral: true });
+          await errReply(interaction, "Nothing to change", "Pick at least one setting to change, or use /warnconfig status.");
           return;
         }
         await updateSettings(gid, patch);
-        await interaction.reply({ content: "Warn/moderation settings saved.", ephemeral: true });
+        await okReply(interaction, "Warn config saved", "Warn/moderation settings were updated.");
         return;
       }
 
       const s = await getSettings(gid);
       const lines = [
-        `Warn limit: **${s?.warnLimit ?? 0}** (0 = disabled)`,
-        `Auto action: **${s?.warnAction ?? "timeout"}**`,
-        `Timeout length: **${s?.warnTimeoutMins ?? 10} min**`,
-        `Mod log channel: ${s?.modLogChannel ? `<#${s.modLogChannel}>` : "**not set**"}`,
-        `DM members: **${s?.modDmUser ? "yes" : "no"}**`,
+        `**Warn limit:** ${s?.warnLimit ?? 0} (0 = disabled)`,
+        `**Auto action:** ${s?.warnAction ?? "timeout"}`,
+        `**Timeout length:** ${s?.warnTimeoutMins ?? 10} min`,
+        `**Mod log channel:** ${s?.modLogChannel ? `<#${s.modLogChannel}>` : "not set"}`,
+        `**DM members:** ${s?.modDmUser ? "yes" : "no"}`,
       ];
-      await interaction.reply({ content: `**Warn config**\n${lines.join("\n")}`, ephemeral: true });
+      await infoReply(interaction, "Warn config", lines.join("\n"));
     },
   },
 ];

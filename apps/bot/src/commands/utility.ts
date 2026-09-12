@@ -6,7 +6,10 @@ import {
 } from "discord.js";
 import { commandRegistry } from "./index.js";
 import { getSettings } from "../lib/store.js";
+import { C, makeEmbed, okReply, errReply } from "../lib/embeds.js";
 import type { BotCommand } from "./index.js";
+
+const CATEGORY_ORDER = ["Moderation", "Auto-mod", "Anti-spam", "Leveling", "Welcome", "Reaction Roles", "Configuration", "Utility"];
 
 export const utilityCommands: BotCommand[] = [
   {
@@ -14,17 +17,24 @@ export const utilityCommands: BotCommand[] = [
       .setName("help")
       .setDescription("List all commands"),
     async execute(interaction) {
-      const lines = [...commandRegistry.values()].map((c) => `\`/${c.data.name}\``).join(" ");
-      await interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0x5865f2)
-            .setTitle("Commands")
-            .setDescription(
-              `${lines}\n\nAll modules are configured per-server via slash commands with Manage Guild / Manage Roles / Moderate Members. Use \`/settings\` to see what's on.`
-            ),
-        ],
-      });
+      const grouped = new Map<string, string[]>();
+      for (const cmd of commandRegistry.values()) {
+        const cat = cmd.category ?? "Other";
+        const arr = grouped.get(cat) ?? [];
+        arr.push(`\`/${cmd.data.name}\``);
+        grouped.set(cat, arr);
+      }
+      const embed = new EmbedBuilder()
+        .setColor(C.info)
+        .setTitle("Help — Commands")
+        .setDescription("All modules are configured per-server via slash commands. Use `/settings` to see what's on.")
+        .setFooter({ text: "Astalon" });
+      const order = [...CATEGORY_ORDER].filter((c) => grouped.has(c));
+      const rest = [...grouped.keys()].filter((c) => !CATEGORY_ORDER.includes(c));
+      for (const cat of [...order, ...rest]) {
+        embed.addFields({ name: `**${cat}**`, value: grouped.get(cat)!.join(" · "), inline: false });
+      }
+      await interaction.reply({ embeds: [embed] });
     },
   },
 
@@ -34,7 +44,15 @@ export const utilityCommands: BotCommand[] = [
       const now = Date.now();
       await interaction.deferReply({ ephemeral: true });
       const roundtrip = Date.now() - now;
-      await interaction.editReply({ content: `Pong! 🏓 WebSocket **${client.ws.ping}ms** · Roundtrip **${roundtrip}ms**` });
+      await interaction.editReply({
+        embeds: [
+          makeEmbed(
+            C.info,
+            "Pong!",
+            `**WebSocket:** \`${client.ws.ping}ms\`\n**Roundtrip:** \`${roundtrip}ms\``,
+          ).setFooter({ text: "Utility" }),
+        ],
+      });
     },
   },
 
@@ -46,7 +64,7 @@ export const utilityCommands: BotCommand[] = [
       const g = interaction.guild!;
       const boost = g.premiumSubscriptionCount ?? 0;
       const embed = new EmbedBuilder()
-        .setColor(0x5865f2)
+        .setColor(C.utility)
         .setTitle(g.name)
         .setThumbnail(g.iconURL({ size: 256 }) ?? null)
         .setDescription(
@@ -57,7 +75,8 @@ export const utilityCommands: BotCommand[] = [
             `**Boosts:** ${boost}`,
             `**Created:** <t:${Math.floor(g.createdTimestamp / 1000)}:R>`,
           ].join("\n")
-        );
+        )
+        .setFooter({ text: "Utility" });
       await interaction.reply({ embeds: [embed] });
     },
   },
@@ -78,7 +97,7 @@ export const utilityCommands: BotCommand[] = [
             .join(" ") || "—"
         : "—";
       const embed = new EmbedBuilder()
-        .setColor(0x5865f2)
+        .setColor(C.utility)
         .setTitle(user.tag)
         .setThumbnail(user.displayAvatarURL({ size: 256 }))
         .setDescription(
@@ -89,7 +108,8 @@ export const utilityCommands: BotCommand[] = [
             `**Account created:** <t:${Math.floor(user.createdTimestamp / 1000)}:R>`,
             `**Roles:** ${roles}`,
           ].join("\n")
-        );
+        )
+        .setFooter({ text: "Utility" });
       await interaction.reply({ embeds: [embed] });
     },
   },
@@ -103,7 +123,7 @@ export const utilityCommands: BotCommand[] = [
       const user = interaction.options.getUser("user") ?? interaction.user;
       const url = user.displayAvatarURL({ size: 1024 });
       await interaction.reply({
-        embeds: [new EmbedBuilder().setColor(0x5865f2).setTitle(`${user.tag}'s avatar`).setImage(url)],
+        embeds: [new EmbedBuilder().setColor(C.utility).setTitle(`${user.tag}'s avatar`).setImage(url).setFooter({ text: "Utility" })],
       });
     },
   },
@@ -119,13 +139,13 @@ export const utilityCommands: BotCommand[] = [
       const channel = interaction.options.getChannel("channel", true);
       const message = interaction.options.getString("message", true);
       if (!("send" in channel)) {
-        await interaction.reply({ content: "Please pick a text channel.", ephemeral: true });
+        await errReply(interaction, "Invalid channel", "Please pick a text channel.");
         return;
       }
       await channel.send({
-        embeds: [new EmbedBuilder().setColor(0x5865f2).setTitle("📢 Announcement").setDescription(message)],
+        embeds: [new EmbedBuilder().setColor(C.utility).setTitle("📢 Announcement").setDescription(message).setFooter({ text: "Astalon" })],
       });
-      await interaction.reply({ content: `Announcement posted in ${channel}.`, ephemeral: true });
+      await okReply(interaction, "Announcement posted", `Announcement posted in ${channel}.`);
     },
   },
 
@@ -145,9 +165,10 @@ export const utilityCommands: BotCommand[] = [
         .filter((o): o is string => !!o);
       const emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
       const embed = new EmbedBuilder()
-        .setColor(0x5865f2)
+        .setColor(C.utility)
         .setTitle(question)
-        .setDescription(options.map((o, i) => `${emojis[i]} ${o}`).join("\n"));
+        .setDescription(options.map((o, i) => `${emojis[i]} ${o}`).join("\n"))
+        .setFooter({ text: "Astalon" });
       const sent = await interaction.reply({ embeds: [embed] }).catch(() => null);
       if (!sent) return;
       const msg = await interaction.fetchReply().catch(() => null);
@@ -171,9 +192,13 @@ export const utilityCommands: BotCommand[] = [
         `**Goodbye:** ${s?.goodbyeEnabled ? "on" : "off"} ${s?.goodbyeChannel ? `(<#${s.goodbyeChannel}>)` : ""}`,
         `**Logging:** ${s?.loggingEnabled ? "on" : "off"} ${s?.logChannel ? `(<#${s.logChannel}>)` : ""} · events: ${(s?.logEvents ?? []).length || "none"}`,
         `**Auto-mod:** ${s?.automod?.enabled ? "on" : "off"} · words: ${s?.automod?.words?.length ?? 0} · invites: ${s?.automod?.invite ? "on" : "off"} · caps: ${s?.automod?.caps ? "on" : "off"}`,
+        `**Anti-spam:** ${s?.antispam?.enabled ? `on (${s?.antispam?.limit ?? 5} msgs / ${s?.antispam?.windowSecs ?? 5}s)` : "off"}`,
         `**Warn limit:** ${s?.warnLimit ?? 0} (action: ${s?.warnAction ?? "timeout"}) · mod log ${s?.modLogChannel ? `(<#${s.modLogChannel}>)` : "not set"}`,
       ];
-      await interaction.reply({ content: `**Server settings**\n${lines.join("\n")}`, ephemeral: true });
+      await interaction.reply({
+        embeds: [makeEmbed(C.config, "Server settings", lines.join("\n"))],
+        ephemeral: true,
+      });
     },
   },
 ];

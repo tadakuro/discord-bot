@@ -5,6 +5,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { updateSettings, getSettings } from "../lib/store.js";
+import { C, makeEmbed, okReply, infoReply } from "../lib/embeds.js";
 import type { BotCommand } from "./index.js";
 
 export const welcomeCommands: BotCommand[] = [
@@ -40,23 +41,27 @@ export const welcomeCommands: BotCommand[] = [
           ...(welcome ? { welcomeMessage: welcome } : {}),
           ...(goodbye ? { goodbyeMessage: goodbye } : {}),
         });
-        await interaction.reply({ content: `Welcome channel set to ${channel}. Configure the message template and toggles with \`/welcome set\` and \`/welcome enable\`.`, ephemeral: true });
+        await okReply(
+          interaction,
+          "Welcome channel set",
+          `Welcome channel set to ${channel}. Configure the message template and toggles with \`/welcome set\` and \`/welcome enable\`.`
+        );
       } else if (sub === "enable") {
         const welcome = interaction.options.getBoolean("welcome", true);
         const goodbye = interaction.options.getBoolean("goodbye", true);
         await updateSettings(interaction.guildId!, { welcomeEnabled: welcome, goodbyeEnabled: goodbye });
-        await interaction.reply({ content: `Welcome messages: **${welcome ? "ON" : "OFF"}**, goodbye messages: **${goodbye ? "ON" : "OFF"}**.`, ephemeral: true });
+        await okReply(interaction, "Welcome updated", `Welcome messages: **${welcome ? "ON" : "OFF"}**, goodbye messages: **${goodbye ? "ON" : "OFF"}**.`);
       } else {
         const s = await getSettings(interaction.guildId!);
         const lines = [
-          `Welcome enabled: **${s?.welcomeEnabled ? "yes" : "no"}**`,
-          `Welcome channel: ${s?.welcomeChannel ? `<#${s.welcomeChannel}>` : "none"}`,
-          `Welcome message: \`${s?.welcomeMessage ?? "-"}\``,
-          `Goodbye enabled: **${s?.goodbyeEnabled ? "yes" : "no"}**`,
-          `Goodbye channel: ${s?.goodbyeChannel ? `<#${s.goodbyeChannel}>` : "none"}`,
-          `Goodbye message: \`${s?.goodbyeMessage ?? "-"}\``,
+          `**Welcome enabled:** ${s?.welcomeEnabled ? "yes" : "no"}`,
+          `**Welcome channel:** ${s?.welcomeChannel ? `<#${s.welcomeChannel}>` : "none"}`,
+          `**Welcome message:** \`${s?.welcomeMessage ?? "-"}\``,
+          `**Goodbye enabled:** ${s?.goodbyeEnabled ? "yes" : "no"}`,
+          `**Goodbye channel:** ${s?.goodbyeChannel ? `<#${s.goodbyeChannel}>` : "none"}`,
+          `**Goodbye message:** \`${s?.goodbyeMessage ?? "-"}\``,
         ];
-        await interaction.reply({ content: `**Welcome config**\n${lines.join("\n")}`, ephemeral: true });
+        await infoReply(interaction, "Welcome config", lines.join("\n"));
       }
     },
   },

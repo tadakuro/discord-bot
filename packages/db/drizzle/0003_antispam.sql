@@ -1,0 +1,1 @@
+ALTER TABLE "guild_settings" ADD COLUMN "antispam" jsonb DEFAULT '{}'::jsonb NOT NULL;
