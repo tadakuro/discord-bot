@@ -3,17 +3,10 @@ import { guildSettings, autoRoles } from "@dcbot/db";
 import { eq } from "drizzle-orm";
 import { EmbedBuilder, type Client, type GuildMember, type PartialGuildMember } from "discord.js";
 import { sendLog } from "../lib/logging.js";
+import { template, buildWelcomeEmbed, buildGoodbyeEmbed, DEFAULT_WELCOME, DEFAULT_GOODBYE } from "../lib/welcome.js";
 
 async function resolveMember(member: GuildMember | PartialGuildMember): Promise<GuildMember | null> {
   return member.partial ? member.fetch().catch(() => null) : member;
-}
-
-export function template(message: string, member: GuildMember): string {
-  return message
-    .replace("{user}", `<@${member.id}>`)
-    .replace("{username}", member.user.username)
-    .replace("{server}", member.guild.name)
-    .replace("{memberCount}", String(member.guild.memberCount));
 }
 
 export async function sendWelcomeEmbed(member: GuildMember) {
@@ -24,13 +17,8 @@ export async function sendWelcomeEmbed(member: GuildMember) {
   const channel = await member.guild.channels.fetch(settings.welcomeChannel).catch(() => null);
   if (!channel || !("send" in channel)) return;
 
-  const text = template(settings.welcomeMessage ?? "Welcome {user} to {server}!", member);
-  const embed = new EmbedBuilder()
-    .setColor(0x57f287)
-    .setTitle("Welcome!")
-    .setDescription(text)
-    .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
-    .setFooter({ text: `Member #${member.guild.memberCount}` });
+  const text = template(settings.welcomeMessage ?? DEFAULT_WELCOME, member);
+  const embed = buildWelcomeEmbed(text, member);
   await channel.send({ embeds: [embed] }).catch(() => {});
 }
 
@@ -42,12 +30,8 @@ export async function sendGoodbyeEmbed(member: GuildMember) {
   const channel = await member.guild.channels.fetch(settings.goodbyeChannel).catch(() => null);
   if (!channel || !("send" in channel)) return;
 
-  const text = template(settings.goodbyeMessage ?? "{user} left {server}.", member);
-  const embed = new EmbedBuilder()
-    .setColor(0xed4245)
-    .setTitle("Goodbye!")
-    .setDescription(text)
-    .setThumbnail(member.user.displayAvatarURL({ size: 256 }));
+  const text = template(settings.goodbyeMessage ?? DEFAULT_GOODBYE, member);
+  const embed = buildGoodbyeEmbed(text, member);
   await channel.send({ embeds: [embed] }).catch(() => {});
 }
 
@@ -62,6 +46,17 @@ export async function handleMemberAdd(member: GuildMember | PartialGuildMember, 
   const resolved = await resolveMember(member);
   if (!resolved) return;
   member = resolved;
+
+  const db = getDb();
+  const settings = await db.query.guildSettings.findFirst({ where: eq(guildSettings.guildId, member.guild.id) });
+  const minDays = settings?.antialtDays ?? 0;
+  if (minDays > 0) {
+    const ageDays = (Date.now() - member.user.createdTimestamp) / 86_400_000;
+    if (ageDays < minDays) {
+      await member.kick(`Alternative/alt account — account is ${Math.floor(ageDays)} day(s) old (server requires ${minDays}+)`).catch(() => {});
+      return;
+    }
+  }
 
   await applyAutoRoles(member);
   await sendWelcomeEmbed(member);

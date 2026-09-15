@@ -38,3 +38,5 @@ jobs:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           HEARTBEAT_URL: ${{ secrets.HEARTBEAT_URL }}
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          AI_MODEL: nemotron-3-super:cloud

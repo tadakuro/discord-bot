@@ -32,6 +32,7 @@ export const guilds = pgTable("guilds", {
 export const guildSettings = pgTable("guild_settings", {
   guildId: text("guild_id").primaryKey().references(() => guilds.id, { onDelete: "cascade" }),
   updatedAt: timestamp("updated_at").default(sql`now()`).notNull(),
+  prefix: text("prefix").default("!").notNull(),
 
   // Leveling
   levelingEnabled: boolean("leveling_enabled").default(false).notNull(),
@@ -45,10 +46,10 @@ export const guildSettings = pgTable("guild_settings", {
   // Welcome / Goodbye
   welcomeEnabled: boolean("welcome_enabled").default(false).notNull(),
   welcomeChannel: text("welcome_channel"),
-  welcomeMessage: text("welcome_message").default("Welcome {user} to {server}!"),
+  welcomeMessage: text("welcome_message").default("Welcome to **{server}**, {user}! Please check the rules and say hi — we're glad to have you here."),
   goodbyeEnabled: boolean("goodbye_enabled").default(false).notNull(),
   goodbyeChannel: text("goodbye_channel"),
-  goodbyeMessage: text("goodbye_message").default("{user} has left {server}."),
+  goodbyeMessage: text("goodbye_message").default("Goodbye {user}! Thanks for being part of **{server}** — hope to see you again soon."),
 
   // Logging
   loggingEnabled: boolean("logging_enabled").default(false).notNull(),
@@ -72,6 +73,33 @@ export const guildSettings = pgTable("guild_settings", {
 
   // Anti-spam
   antispam: jsonb("antispam").$type<AntiSpamConfig>().default({}).notNull(),
+
+  // Starboard
+  starboardChannel: text("starboard_channel"),
+  starboardThreshold: integer("starboard_threshold").default(3).notNull(),
+
+  // Suggestions
+  suggestionsChannel: text("suggestions_channel"),
+
+  // Verify
+  verifyRole: text("verify_role"),
+  verifyChannel: text("verify_channel"),
+
+  // Tickets
+  ticketChannel: text("ticket_channel"),
+  ticketCategory: text("ticket_category"),
+  ticketRole: text("ticket_role"),
+
+  // Temporary voice channels
+  tempvoiceCategory: text("tempvoice_category"),
+  tempvoiceLobby: text("tempvoice_lobby"),
+  tempvoiceName: text("tempvoice_name").default("{username}'s channel").notNull(),
+
+  // Birthdays
+  birthdayChannel: text("birthday_channel"),
+
+  // Anti alt (new-account restrictions)
+  antialtDays: integer("antialt_days").default(0).notNull(),
 });
 
 export const levelRoles = pgTable("level_roles", {
@@ -121,3 +149,86 @@ export const warns = pgTable("warns", {
   createdAt: timestamp("created_at").default(sql`now()`).notNull(),
   active: boolean("active").default(true).notNull(),
 });
+
+export const afkStatus = pgTable(
+  "afk_status",
+  {
+    guildId: text("guild_id").notNull(),
+    userId: text("user_id").notNull(),
+    reason: text("reason"),
+    channelId: text("channel_id"),
+    updatedAt: timestamp("updated_at").default(sql`now()`).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.guildId, t.userId] })]
+);
+
+export const reminders = pgTable("reminders", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  channelId: text("channel_id").notNull(),
+  guildId: text("guild_id"),
+  text: text("text").notNull(),
+  remindAt: timestamp("remind_at").notNull(),
+  createdAt: timestamp("created_at").default(sql`now()`).notNull(),
+});
+
+export const tags = pgTable(
+  "tags",
+  {
+    id: text("id").primaryKey(),
+    guildId: text("guild_id").notNull(),
+    name: text("name").notNull(),
+    content: text("content").notNull(),
+    ownerId: text("owner_id").notNull(),
+    aliasedTo: text("aliased_to"),
+    createdAt: timestamp("created_at").default(sql`now()`).notNull(),
+  },
+  (t) => [unique().on(t.guildId, t.name)]
+);
+
+export const notes = pgTable("notes", {
+  id: text("id").primaryKey(),
+  guildId: text("guild_id").notNull(),
+  userId: text("user_id").notNull(),
+  authorId: text("author_id").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").default(sql`now()`).notNull(),
+});
+
+export const starboardMessages = pgTable("starboard_messages", {
+  messageId: text("message_id").primaryKey(),
+  guildId: text("guild_id").notNull(),
+  channelId: text("channel_id").notNull(),
+  starMessageId: text("star_message_id"),
+  count: integer("count").default(0).notNull(),
+});
+
+export const giveaways = pgTable("giveaways", {
+  id: text("id").primaryKey(),
+  guildId: text("guild_id").notNull(),
+  channelId: text("channel_id").notNull(),
+  messageId: text("message_id"),
+  prize: text("prize").notNull(),
+  winners: integer("winners").default(1).notNull(),
+  endsAt: timestamp("ends_at").notNull(),
+  ended: boolean("ended").default(false).notNull(),
+});
+
+export const rssFeeds = pgTable("rss_feeds", {
+  id: text("id").primaryKey(),
+  guildId: text("guild_id").notNull(),
+  channelId: text("channel_id").notNull(),
+  url: text("url").notNull(),
+  lastItem: text("last_item"),
+});
+
+export const birthdays = pgTable(
+  "birthdays",
+  {
+    guildId: text("guild_id").notNull(),
+    userId: text("user_id").notNull(),
+    month: integer("month").notNull(),
+    day: integer("day").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.guildId, t.userId] })]
+);

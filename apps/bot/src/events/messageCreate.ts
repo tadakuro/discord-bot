@@ -4,6 +4,10 @@ import { and, eq } from "drizzle-orm";
 import { uid } from "../lib/uid.js";
 import { activeWarnCount, punishAtLimit } from "../lib/punish.js";
 import { handleAntiSpam } from "../lib/antispam.js";
+import { handlePrefixCommand } from "../lib/prefix.js";
+import { handleAfkMessage } from "../commands/afk.js";
+import { resolveTag } from "../commands/tags.js";
+import { commandRegistry } from "../commands/index.js";
 import type { Message, TextChannel, NewsChannel, ThreadChannel } from "discord.js";
 import { EmbedBuilder } from "discord.js";
 import type { AutomodConfig } from "@dcbot/db";
@@ -48,11 +52,26 @@ export async function handleMessage(message: Message) {
 
   await ensureGuild(message.guildId, message.guild.name, message.guild.iconURL() ?? null, message.guild.ownerId);
 
+  await handleAfkMessage(message);
+
   const db = getDb();
   const settings = await db.query.guildSettings.findFirst({
     where: eq(guildSettings.guildId, message.guildId),
   });
   if (!settings) return;
+
+  // --- Prefix commands + tags ---
+  const prefix = settings.prefix ?? "!";
+  if (message.content.startsWith(prefix)) {
+    const first = message.content.slice(prefix.length).trim().split(/\s+/)[0]?.toLowerCase();
+    if (first && !commandRegistry.has(first)) {
+      const rest = message.content.slice(prefix.length + first.length).trim();
+      const handled = await resolveTag(message, first, rest ? rest.split(/\s+/) : []);
+      if (handled) return;
+    }
+    await handlePrefixCommand(message, prefix);
+    return;
+  }
 
   // --- Auto-mod ---
   const automod = settings.automod as AutomodConfig | undefined;

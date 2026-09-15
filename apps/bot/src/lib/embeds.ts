@@ -5,6 +5,7 @@ export const C = {
   leveling: 0x5865f2,
   config: 0x57f287,
   automod: 0xf8b648,
+  ai: 0x9146ff,
   utility: 0x5b9cf8,
   welcome: 0x57f287,
   error: 0xed4245,

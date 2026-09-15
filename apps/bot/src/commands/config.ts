@@ -178,4 +178,35 @@ export const configCommands: BotCommand[] = [
       }
     },
   },
+
+  {
+    data: new SlashCommandBuilder()
+      .setName("prefix")
+      .setDescription("Configure the message prefix for prefix commands")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addSubcommand((s) =>
+        s
+          .setName("set")
+          .setDescription("Set a custom prefix (1-3 chars, no spaces or /)")
+          .addStringOption((o) => o.setName("prefix").setDescription("New prefix").setRequired(true).setMinLength(1).setMaxLength(3))
+      )
+      .addSubcommand((s) => s.setName("status").setDescription("Show the current prefix")),
+    async execute(interaction) {
+      const gid = interaction.guildId!;
+      const sub = interaction.options.getSubcommand();
+      if (sub === "set") {
+        const prefix = interaction.options.getString("prefix", true);
+        if (/[\s/@]/.test(prefix)) {
+          await errReply(interaction, "Invalid prefix", "Prefix can't contain spaces, `/` or `@`.");
+          return;
+        }
+        await updateSettings(gid, { prefix });
+        await okReply(interaction, "Prefix updated", `Prefix commands now start with \`${prefix}\`. Example: \`${prefix}rank\``);
+        return;
+      }
+      const s = await getSettings(gid);
+      const p = s?.prefix ?? "!";
+      await infoReply(interaction, "Prefix", `Current prefix: \`${p}\`\nExamples: \`${p}help\`, \`${p}rank\`, \`${p}kick @user\``);
+    },
+  },
 ];

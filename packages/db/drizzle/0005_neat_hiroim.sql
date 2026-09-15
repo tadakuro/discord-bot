@@ -1,0 +1,4 @@
+ALTER TABLE "guild_settings" ALTER COLUMN "welcome_message" SET DEFAULT 'Welcome to **{server}**, {user}! Please check the rules and say hi — we''re glad to have you here.';--> statement-breakpoint
+ALTER TABLE "guild_settings" ALTER COLUMN "goodbye_message" SET DEFAULT 'Goodbye {user}! Thanks for being part of **{server}** — hope to see you again soon.';--> statement-breakpoint
+UPDATE "guild_settings" SET "welcome_message" = 'Welcome to **{server}**, {user}! Please check the rules and say hi — we''re glad to have you here.' WHERE "welcome_message" = 'Welcome {user} to {server}!';--> statement-breakpoint
+UPDATE "guild_settings" SET "goodbye_message" = 'Goodbye {user}! Thanks for being part of **{server}** — hope to see you again soon.' WHERE "goodbye_message" IN ('{user} has left {server}.', '{user} left {server}.');

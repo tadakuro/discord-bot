@@ -2,8 +2,9 @@ import { config as loadEnv } from "dotenv";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client, GatewayIntentBits, Partials } from "discord.js";
-import { registerCommands } from "./commands/index.js";
+import { registerCommands, startCommandSync } from "./commands/index.js";
 import { registerEvents } from "./events/index.js";
+import { startJobs } from "./lib/jobs.js";
 import { startHeartbeat } from "./lib/heartbeat.js";
 import { startDbKeepAlive } from "./lib/dbKeepAlive.js";
 
@@ -29,6 +30,7 @@ export const client = new Client({
     GatewayIntentBits.GuildModeration,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.MessageContent,
   ],
   partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.Reaction],
@@ -36,9 +38,11 @@ export const client = new Client({
 
 registerEvents(client);
 
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   console.log(`Logged in as ${client.user?.tag}`);
-  await registerCommands(client);
+  await registerCommands(client, true);
+  startCommandSync(client);
+  startJobs(client);
 });
 
 await client.login(token);

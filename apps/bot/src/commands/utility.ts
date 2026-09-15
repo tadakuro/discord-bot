@@ -9,7 +9,29 @@ import { getSettings } from "../lib/store.js";
 import { C, makeEmbed, okReply, errReply } from "../lib/embeds.js";
 import type { BotCommand } from "./index.js";
 
-const CATEGORY_ORDER = ["Moderation", "Auto-mod", "Anti-spam", "Leveling", "Welcome", "Reaction Roles", "Configuration", "Utility"];
+const CATEGORY_ORDER = ["Moderation", "Auto-mod", "Anti-spam", "Leveling", "Welcome", "Reaction Roles", "Configuration", "AI", "Utility"];
+
+type OptJson = { type?: number; name?: string; description?: string; options?: OptJson[] };
+
+function summarizeSubcommands(data: { toJSON(): unknown }): string[] {
+  const json = data.toJSON() as { options?: OptJson[] };
+  const out: string[] = [];
+  for (const opt of json?.options ?? []) {
+    if (opt.type === 1 && opt.name) out.push(opt.name);
+    else if (opt.type === 2 && opt.name) {
+      for (const sub of opt.options ?? []) if (sub.name) out.push(`${opt.name}:${sub.name}`);
+    }
+  }
+  return out;
+}
+
+function commandLine(cmd: { data: { name: string; description?: string; toJSON(): unknown } }) {
+  const name = `\`/${cmd.data.name}\``;
+  const desc = (cmd.data as { description?: string }).description;
+  const subs = summarizeSubcommands(cmd.data);
+  if (subs.length) return `${name} — ${desc}\n  _subcommands: \`${subs.join("` · `")}\`_`;
+  return `${name} — ${desc}`;
+}
 
 export const utilityCommands: BotCommand[] = [
   {
@@ -21,18 +43,34 @@ export const utilityCommands: BotCommand[] = [
       for (const cmd of commandRegistry.values()) {
         const cat = cmd.category ?? "Other";
         const arr = grouped.get(cat) ?? [];
-        arr.push(`\`/${cmd.data.name}\``);
+        arr.push(commandLine(cmd));
         grouped.set(cat, arr);
       }
       const embed = new EmbedBuilder()
         .setColor(C.info)
-        .setTitle("Help — Commands")
-        .setDescription("All modules are configured per-server via slash commands. Use `/settings` to see what's on.")
-        .setFooter({ text: "Astalon" });
+        .setTitle("Help — All commands")
+        .setDescription(
+          `The bot covers every common MEE6 / Carl-bot feature. Per-server modules are configured with Manage Guild / Manage Roles / Moderate Members permissions.\n\nUse **\`/settings\`** for a server-wide overview and **\`/help <command>\` guidance below.`
+        )
+        .setFooter({ text: `${interaction.client.user?.username ?? "DCBot"} · ${commandRegistry.size} commands` });
       const order = [...CATEGORY_ORDER].filter((c) => grouped.has(c));
       const rest = [...grouped.keys()].filter((c) => !CATEGORY_ORDER.includes(c));
       for (const cat of [...order, ...rest]) {
-        embed.addFields({ name: `**${cat}**`, value: grouped.get(cat)!.join(" · "), inline: false });
+        const lines = grouped.get(cat)!;
+        const chunks: string[] = [];
+        let cur = "";
+        for (const line of lines) {
+          if (cur && cur.length + line.length + 1 > 1000) {
+            chunks.push(cur);
+            cur = line;
+          } else {
+            cur = cur ? cur + "\n" + line : line;
+          }
+        }
+        if (cur) chunks.push(cur);
+        for (let i = 0; i < chunks.length; i++) {
+          embed.addFields({ name: `**${cat}**${chunks.length > 1 ? ` (${i + 1}/${chunks.length})` : ""}`, value: chunks[i], inline: false });
+        }
       }
       await interaction.reply({ embeds: [embed] });
     },
@@ -194,6 +232,7 @@ export const utilityCommands: BotCommand[] = [
         `**Auto-mod:** ${s?.automod?.enabled ? "on" : "off"} · words: ${s?.automod?.words?.length ?? 0} · invites: ${s?.automod?.invite ? "on" : "off"} · caps: ${s?.automod?.caps ? "on" : "off"}`,
         `**Anti-spam:** ${s?.antispam?.enabled ? `on (${s?.antispam?.limit ?? 5} msgs / ${s?.antispam?.windowSecs ?? 5}s)` : "off"}`,
         `**Warn limit:** ${s?.warnLimit ?? 0} (action: ${s?.warnAction ?? "timeout"}) · mod log ${s?.modLogChannel ? `(<#${s.modLogChannel}>)` : "not set"}`,
+        `**Prefix:** \`${s?.prefix ?? "!"}\` — prefix commands work like \`${s?.prefix ?? "!"}rank\``,
       ];
       await interaction.reply({
         embeds: [makeEmbed(C.config, "Server settings", lines.join("\n"))],
